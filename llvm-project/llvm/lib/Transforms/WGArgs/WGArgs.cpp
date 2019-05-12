@@ -1,4 +1,4 @@
-#define APP "PS_2"
+#define APP "CEDD"
 
 #include <iostream>
 #include <sstream>
@@ -121,7 +121,7 @@ namespace {
         }
       }
     }
-    // get the resulte of the value and another constant
+    // get the result of the value and another constant
     int computeConstant(Instruction *inst, int value, std::string otor)
     {
       Value *op0 = inst->getOperand(0);

@@ -1,4 +1,4 @@
-#define APP "PS_2"
+#define APP "CEDD"
 
 #include <iostream>
 #include <sstream>

@@ -1,4 +1,4 @@
-#define APP "PS_2"
+#define APP "CEDD"
 
 #include <iostream>
 #include <sstream>
@@ -24,10 +24,10 @@ namespace {
 
     struct RW
     {
-      int kernel;
-      int arg;
-      bool read;
-      bool write;
+      int kernel;   // kernel id
+      int arg;      // arg is
+      bool read;    // load or not
+      bool write;   // store or not
     };
 
     int match(RW rw[], int k, int a, int rwcnt)
@@ -44,7 +44,9 @@ namespace {
 
     bool runOnModule(Module &M) override {
 
-      // we need scnt and same[..] from SameBuffer (host)
+      // we need scnt and same[..] from SameBuffer.out
+      // scnt: number of the pairs of args with same buffer
+      // same[..]: pairs of args with same buffer
       int same[10][4];
       std::string app = APP;
       std::string file = "/root/Work/llvm/apps/" + app + "/SameBuffer.out";
@@ -60,25 +62,7 @@ namespace {
         ss >> same[scnt][3];
         scnt++;
       }
-      /*
-      int scnt = 7;
-      int same[10][4] = { {0,0,1,1},
-                          {0,1,1,0},
-                          {1,0,2,1},
-                          {1,1,2,0},
-                          {1,2,2,2},
-                          {2,0,3,1},
-                          {2,1,3,0}};
-      /*
-      int scnt = 3;
-      int same[10][4] = { {0,0,2,1},
-                          {0,3,1,1},
-                          {1,0,2,0}};
-      
-      int scnt = 2;
-      int same[10][4] = { {0,0,1,3},
-                          {0,2,1,7}};
-      */
+      // initialize rw struct
       RW rw[10];
       int rwcnt = 0;
       for(int i = 0; i < scnt; i++)
@@ -87,11 +71,12 @@ namespace {
         {
           int k = same[i][j*2];
           int a = same[i][j*2+1];
-          if(match(rw, k, a, rwcnt) == -1) // if it has not stored to rw
+          // has not stored to rw
+          if(match(rw, k, a, rwcnt) == -1)
           {
             rw[rwcnt].kernel = k;
             rw[rwcnt].arg    = a;
-            rw[rwcnt].read   = false; // initialize
+            rw[rwcnt].read   = false;
             rw[rwcnt].write  = false;
             rwcnt++;
           }
@@ -104,33 +89,33 @@ namespace {
         if(f->getCallingConv() == 76) // __kernel: 76
         {
           kcnt++;
-          //errs() << "Function name: " << f->getName() << '\n';
-          //FunctionType *ty = f->getFunctionType();
-          //errs() << "numparams: " << ty->getNumParams() << '\n';
-          
+          //errs() << "Function name: " << f->getName() << '\n';          
           int acnt = -1;
           for(Function::arg_iterator a = f->arg_begin(), e = f->arg_end(); a != e; a++) // all args of the function
           {
             acnt++;
             int pos = match(rw, kcnt, acnt, rwcnt);
-            if(pos != -1)  // if (kcnt,acnt) is in rw: find this arg
+            // if (kcnt, acnt) is in rw: find its position
+            if(pos != -1)
             {
               //errs() << *a << '\n';
-              std::string sa = formatv("{0}",*a).str(); // Argument(?) to string
+              std::string sa = formatv("{0}",*a).str(); // to string
               for(Function::iterator bb = f->begin(), e = f->end(); bb!=e; bb++)  // all basic blocks
               {
                 for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // all instructions
                 {
-                  std::string si = formatv("{0}",*i).str();
-                  size_t idx = si.find(sa); // find the related instructions: a gep instruction
-                  if(idx != -1)
+                  std::string si = formatv("{0}",*i).str(); // to string
+                  // find the related instructions: a gep instruction
+                  if(si.find(sa) != -1)
                   {
                     //errs() << "inst: " << *i << '\n';
                     Instruction *i2 = dyn_cast<Instruction>(i);
-                    while(i2->getOpcode() != Instruction::Load    // until find the load
-                        && i2->getOpcode() != Instruction::Store) // or store operation
+                    // until find the load or store operation
+                    while(i2->getOpcode() != Instruction::Load
+                        && i2->getOpcode() != Instruction::Store) 
                     {
-                      for(User *U: i2->users())  // find what instruction (only one instruction) uses this instruction 
+                      // find what inst uses this inst
+                      for(User *U: i2->users())  
                       {
                         if(Instruction *inst = dyn_cast<Instruction>(U))
                         {

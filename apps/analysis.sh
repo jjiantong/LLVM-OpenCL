@@ -8,6 +8,7 @@ sed -i "1c #define APP \"$app\"" /root/Work/llvm/llvm-project/llvm/lib/Transform
 sed -i "1c #define APP \"$app\"" /root/Work/llvm/llvm-project/llvm/lib/Transforms/InOut/InOut.cpp
 sed -i "1c #define APP \"$app\"" /root/Work/llvm/llvm-project/llvm/lib/Transforms/KKC/KKC.cpp
 sed -i "1c #define APP \"$app\"" /root/Work/llvm/llvm-project/llvm/lib/Transforms/WGArgs/WGArgs.cpp
+sed -i "1c #define APP \"$app\"" /root/Work/llvm/llvm-project/llvm/lib/Transforms/MPS/MPS.cpp
 cd /root/Work/llvm/llvm-project/build
 make > /dev/null
 
@@ -51,6 +52,9 @@ if [ $kernel_num -eq 1 ]
 			then
 				echo -e "\t\tNo"
 		fi
+		
+		# step 3: MPS -> test the args (from host)
+		opt -load ../../llvm-project/build/lib/LLVMMPS.so -mps baseline_2.ll >/dev/null
 fi
 
 echo -e "\n------The End------"

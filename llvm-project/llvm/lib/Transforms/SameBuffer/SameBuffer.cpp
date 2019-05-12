@@ -1,4 +1,4 @@
-#define APP "PS_2"
+#define APP "CEDD"
 
 #include <iostream>
 #include <sstream>
@@ -24,19 +24,19 @@ namespace {
     
     struct SuitInst
     {
-      int iy[5];
-      Instruction* i[5];
+      int iy[5];          // arg id for specific kernel
+      Instruction* i[5];  // inst
     };
 
     bool haveSameInst(SuitInst suitInst[], int x, int y[], int z[]) 
     {
       int flag = 0;
       int same = 0;
-      for(int i1 = 0; i1 < x-1; i1++) // 0 ~ x-2
+      for(int i1 = 0; i1 < x-1; i1++) // kernel: 0 ~ x-2
       {
         for(int j1 = 0; j1 < z[i1]; j1++) // every instruction
         {
-          for(int i2 = i1+1; i2 < x; i2++) // the next ~ x-1
+          for(int i2 = i1+1; i2 < x; i2++) // kernel: the next ~ x-1
           {
             for(int j2 = 0; j2 < z[i2]; j2++) // every instruction
             {
@@ -63,27 +63,11 @@ namespace {
       
     bool runOnModule(Module &M) override {
 
-      // we need x and y[..] from NumKernels (kernel)
-      // x: #kernels; y[i]: #args for each kernel
-      /*
-      int x = 4;
-      int y[4];
-      y[0] = 3; y[1] = 4; y[2] = 4; y[3] = 3;   
-      int z[4];
-      SuitInst suitInst[4];      
-      int x = 3;
-      int y[3];
-      y[0] = 4; y[1] = 3; y[2] = 2;
-      int z[3];
-      SuitInst suitInst[3];
-      int x = 2;
-      int y[2];
-      y[0] = 3; y[1] = 8;
-      int z[2];
-      SuitInst suitInst[2];
-      */
-      int x;  // # kernels
-      int y[10];  // # args for each kernel
+      // input: x and y[..] from NumKernels.out
+      // x: number of kernels; 
+      // y[i]: number of args for each kernel
+      int x; 
+      int y[10]; 
       std::string app = APP;
       std::string file = "/root/Work/llvm/apps/" + app + "/NumKernels.out";
       std::ifstream fin(file);
@@ -97,14 +81,15 @@ namespace {
         std::stringstream ss(line);
         ss >> y[i++];
       }
-      int z[10];  // # suitable args (cl_mem) for each kernel
+      // z[..]: number of suitable args (cl_mem) for each kernel
+      int z[10];
       SuitInst suitInst[10];
 
-      int instcnt = -1;
-      int ycnt    = -1;
-      int zcnt    = -1;
-      int xcnt    = 0;
-      int cur     = y[0];
+      int instcnt = -1;   // global arg id
+      int ycnt    = -1;   // local arg id  
+      int zcnt    = -1;   // to compute the suitable args for each kernel
+      int xcnt    = 0;    // kernel id
+      int cur     = y[0]; // arg bound (global) of each kernel 
       for(Module::iterator f = M.begin(), f2 = M.end(); f!=f2; f++) // functions
       { 
         for(Function::iterator bb = f->begin(), e = f->end(); bb!=e; bb++)  // basic blocks
@@ -112,32 +97,35 @@ namespace {
           for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // instructions
           { 
             std::string si = formatv("{0}",*i).str();
-            size_t idx = si.find("clSetKernelArg"); 
-            if(idx != -1) // find "clSetKernelArg"
+            if(si.find("clSetKernelArg") != -1) // find "clSetKernelArg"
             { 
               //errs() << *i << '\n';
               instcnt++;
               ycnt++;
               Instruction *Inst = dyn_cast<Instruction>(i);
-              int opcnt = 0;
-              for(Use &U: Inst->operands()) // find all instructions used by "clSetKernelArg"
+              // find all args the "clSetKernelArg" inst uses
+              int opcnt = 0;              
+              for(Use &U: Inst->operands()) 
               {
                 Value *v = U.get();
                 opcnt++;
-                if(opcnt == 4 && formatv("{0}",*v).str().find("cl_mem") != -1)  // find what values the instruction uses
-                {                                                               // we need the 4th arg with "cl_mem"
+                // we need the 4th arg with "cl_mem"
+                if(opcnt == 4 && formatv("{0}",*v).str().find("cl_mem") != -1)  
+                { 
                   Instruction *arg4 = dyn_cast<Instruction>(v);                  
                   //errs() << "find : " << *arg4 << '\n';  // find instruction
-                  if(instcnt < cur) // the same kernel
+                  // the same kernel
+                  if(instcnt < cur)
                   {
-                    zcnt++; // actual cnt +1
+                    zcnt++; // actual (suitable) cnt +1
                     //errs() << xcnt << ", " << ycnt << " ---- " << zcnt << '\n';
                   }
-                  else  // change to next kernel
+                  // change to next kernel
+                  else 
                   {
                     xcnt++;               // next kernel
                     ycnt = instcnt - cur; // real position
-                    z[xcnt-1] = zcnt+1;   // record kernel's actually cnt
+                    z[xcnt-1] = zcnt+1;   // record kernel's actually (suitable) cnt
                     zcnt = 0;             // start cnting next kernel
                     cur += y[xcnt];       // next kernel's location boundary
                     //errs() << xcnt << ", " << ycnt << " ---- " << zcnt << '\n';
@@ -154,15 +142,17 @@ namespace {
 
       bool same = haveSameInst(suitInst, x, y, z);
       int cnt = 0;
-      while((!same) && cnt<5) // until find same instruction
+      // until find same inst
+      while((!same) && cnt<5)
       {
         for(int i = 0; i < x; i++)  // every kernel
         {
           for(int j = 0; j < z[i]; j++) // every instruction
           {
             Instruction *inst = dyn_cast<Instruction>(suitInst[i].i[j]);  // fetch from suitInst
-            if(inst->getOpcode() == Instruction::BitCast  // for bitcast
-              || inst->getOpcode() == Instruction::Load)  // or load instruction
+            // for bitcast or load inst
+            if(inst->getOpcode() == Instruction::BitCast
+              || inst->getOpcode() == Instruction::Load) 
             {
               Value *v = inst->getOperand(0);
               inst = dyn_cast<Instruction>(v);
@@ -173,7 +163,6 @@ namespace {
         same = haveSameInst(suitInst, x, y, z);
         cnt ++;
       }
-
       return false;
     }
   };

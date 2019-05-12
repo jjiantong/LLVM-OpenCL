@@ -4,6 +4,7 @@
 #include "llvm/Pass.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/FormatVariadic.h"
 
@@ -17,30 +18,31 @@ namespace {
 
 	bool runOnModule(Module &M) override {
     	
-		//errs() << "Module name: " << M.getName() << '\n';			
-		int cnt = 0;
-		for(Module::iterator f=M.begin(), f2=M.end(); f!=f2; f++)	// All functions
+		int cnt = 0;		
+		for(Module::iterator f=M.begin(), f2=M.end(); f!=f2; f++)	// all functions
 		{
-			//errs() << "Function name:" << f->getName() << '\n';
-			for(Function::iterator bb=f->begin(), e=f->end(); bb!=e; bb++)	// All basic blocks
+			for(Function::iterator bb=f->begin(), e=f->end(); bb!=e; bb++)	// all basic blocks
 			{
 				for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++)	// All instructions
 				{
-					//errs() << formatv("{0}",*i) <<"\n";
-					std::string si = formatv("{0}",*i).str();	// Instruction to string
-					size_t idx = si.find("atomic");
-					if(idx != -1)
+					if(CallInst *cinst = dyn_cast<CallInst>(i))
 					{
-						cnt++;
+						if(cinst->getCalledFunction()->getName().find("atomic") != -1)	// get the function called
+						{
+							cnt++;
+						}
 					}
 				}
 			}			
 		}
 		if(cnt)
+		{
 			errs() << "\t\tYes (" << cnt << " AOs)\n";
+		}			
 		else
+		{
 			errs() << "\t\tNo\n";
-
+		}			
     	return false;
     }
   };

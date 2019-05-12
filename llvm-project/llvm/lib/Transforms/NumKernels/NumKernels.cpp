@@ -24,7 +24,8 @@ namespace {
       {        
         if(f->getCallingConv() == 76) // __kernel: 76
         {
-          acnt[kcnt++] = f->getFunctionType()->getNumParams();  // number of params for each kernel
+          // get the number of args for each kernel
+          acnt[kcnt++] = f->getFunctionType()->getNumParams();
         }
       }
       errs() << kcnt << '\n';
@@ -35,12 +36,6 @@ namespace {
           errs() << acnt[i] << '\n';
         }
       }     
-      /*
-      else  // if single-kernel
-      {
-        errs() << "multi-pass scheme: no\nkernel-to-kernel communication:no\n";
-      }
-      */
       return false;
     }
   }; // end of struct Hello
