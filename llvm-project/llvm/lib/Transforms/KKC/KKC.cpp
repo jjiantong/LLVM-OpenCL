@@ -1,4 +1,4 @@
-#define APP "CEDD"
+#define APP "PS_2"
 
 #include <iostream>
 #include <sstream>
@@ -25,25 +25,25 @@ namespace {
 
     struct AccessP
     {
-      Instruction *index;
-      int flag; // 0: no; 1: if branches; 2: for loops 
-      Instruction *cmp; // condition of 1 
-      Instruction *bound; // bound of 2
+      Instruction *index; // index of related gep inst
+      int flag;           // case 0: no; case 1: if branches; case 2: for loops 
+      Instruction *cmp;   // the condition of case 1 
+      Instruction *bound; // the bound of case 2
     };
 
     struct KKCP
     {
-      bool isKKC;
-      int kernel1;
-      int arg1;
-      int kernel2;
-      int arg2;
-      int icnt1;
-      int icnt2;
-      AccessP ap1[16];
-      AccessP ap2[16];
+      bool isKKC;       // KKC or not
+      int kernel1;      // producer kernel id
+      int arg1;         // producer arg id
+      int kernel2;      // consumer kernel id
+      int arg2;         // consumer arg id
+      int icnt1;        // number of write inst in producer kernel
+      int icnt2;        // number of read inst in consumer kernel
+      AccessP ap1[16];  // access pattern in producer kernel
+      AccessP ap2[16];  // access pattern in consumer kernel
     };
-
+    // match for producer kernel
     int matchOut(int cand[][4], int k, int a, int ccnt) // upper kernel
     {
       for(int i = 0; i < ccnt; i++)
@@ -55,7 +55,7 @@ namespace {
       }
       return -1;
     }
-
+    // match for consumer kernel
     int matchIn(int cand[][4], int k, int a, int ccnt)  // lower kernel
     {
       for(int i = 0; i < ccnt; i++)
@@ -70,22 +70,21 @@ namespace {
 
     bool isLoop(KKCP kkc[], BasicBlock *bb, int pos, int icnt, bool isProducer)
     {
-      //errs() << "isloop:\n";
       bool ret = false;
       if(Instruction *last_inst = bb->getTerminator())
       {
         if(BranchInst *br_inst = dyn_cast<BranchInst>(last_inst))
         {
-          if(br_inst->isConditional())  // should be a conditional branch
+          // should be a conditional branch
+          if(br_inst->isConditional()) 
           {
             BasicBlock *dest0 = br_inst->getSuccessor(0); // two successors
             BasicBlock *dest1 = br_inst->getSuccessor(1);
-            if((dest0 == bb)||(dest1 == bb))  // one should be the current bb
+            // one of the successors should be the current bb
+            if((dest0 == bb)||(dest1 == bb)) 
             {
-              //errs() << "is a loop\n";
               Value *v = br_inst->getOperand(0);
-              Instruction *cmpi = dyn_cast<Instruction>(v);
-              //errs() << "cmp: " << *cmpi << '\n';
+              Instruction *cmpi = dyn_cast<Instruction>(v); //errs() << "cmp: " << *cmpi << '\n';
               if(isProducer)
               {
                 kkc[pos].ap1[icnt].bound = cmpi;
@@ -96,34 +95,28 @@ namespace {
               }
               ret = true;
             }
-            //else
-              //errs() << "conditional branch, but not loop.\n";
           }
-          //else
-            //errs() << "unconditional branch\n";
         }
-        //else
-          //errs() << "not branch\n";
       }
       return ret;
     }
 
     bool isBr(KKCP kkc[], BasicBlock *bb, int pos, int icnt, bool isProducer)
     {
-      //errs() << "isbr:\n";
       bool ret = false;
-      if(bb->hasNPredecessors(1)) // should have only one predecessor
+      // should have only one predeccessor
+      if(bb->hasNPredecessors(1))
       {
         BasicBlock *prebb = bb->getUniquePredecessor();
         if(Instruction *last_inst = prebb->getTerminator())
         {
           if(BranchInst *br_inst = dyn_cast<BranchInst>(last_inst))
           {
-            if(br_inst->isConditional())  // should be a conditional branch
+            // terminator of predeccessor should be a conditional branch
+            if(br_inst->isConditional())
             {
               Value *v = br_inst->getOperand(0);
-              Instruction *cmpi = dyn_cast<Instruction>(v);
-              //errs() << "cmp: " << *cmpi << '\n';
+              Instruction *cmpi = dyn_cast<Instruction>(v); //errs() << "cmp: " << *cmpi << '\n';             
               if(isProducer)
               {
                 kkc[pos].ap1[icnt].cmp = cmpi;
@@ -134,35 +127,28 @@ namespace {
               }
               ret = true;
             }
-            //else
-              //errs() << "unconditional branch\n";
           }
-          //else
-            //errs() << "not branch\n";
         }
       }
-      //else
-        //errs() << "has more than 1 prebb\n";
       return ret;
     }
 
     void findAP1(KKCP kkc[], int pos, GetElementPtrInst *inst)
     {
-      kkc[pos].icnt1++;  // number of instructions      
-      //errs() << "inst: " << *inst << '\n'; 
-      Instruction *idx = dyn_cast<Instruction>(inst->getOperand(1));
-      kkc[pos].ap1[kkc[pos].icnt1].index = idx; // store the instruction about index
-      //errs() << "index: " << *idx << '\n';
-      BasicBlock *bb = inst->getParent(); // find its location
-      if(isLoop(kkc, bb, pos, kkc[pos].icnt1, true))  // if is a loop
+      kkc[pos].icnt1++;  // number of instructions  //errs() << "inst: " << *inst << '\n';           
+      Instruction *idx = dyn_cast<Instruction>(inst->getOperand(1));  //errs() << "index: " << *idx << '\n';
+      kkc[pos].ap1[kkc[pos].icnt1].index = idx; // store the instruction about index      
+      // judge for case 123
+      BasicBlock *bb = inst->getParent(); 
+      if(isLoop(kkc, bb, pos, kkc[pos].icnt1, true)) 
       {
         kkc[pos].ap1[kkc[pos].icnt1].flag = 2;
       }                    
-      else if(isBr(kkc, bb, pos, kkc[pos].icnt1, true)) // if is a branch
+      else if(isBr(kkc, bb, pos, kkc[pos].icnt1, true)) 
       {
         kkc[pos].ap1[kkc[pos].icnt1].flag = 1;
       }
-      else  // if no
+      else 
       {
         kkc[pos].ap1[kkc[pos].icnt1].flag = 0;
       }
@@ -170,21 +156,20 @@ namespace {
 
     void findAP2(KKCP kkc[], int pos, GetElementPtrInst *inst)
     {
-      kkc[pos].icnt2++;  // number of instructions
-      //errs() << "inst: " << *inst << '\n';  
-      Instruction *idx = dyn_cast<Instruction>(inst->getOperand(1));
-      kkc[pos].ap2[kkc[pos].icnt2].index = idx; // store the instruction about index
-      //errs() << "index: " << *idx << '\n';  
-      BasicBlock *bb = inst->getParent(); // find its location
-      if(isLoop(kkc, bb, pos, kkc[pos].icnt2, false)) // if is a loop
+      kkc[pos].icnt2++;  // number of instructions  //errs() << "inst: " << *inst << '\n';       
+      Instruction *idx = dyn_cast<Instruction>(inst->getOperand(1));  //errs() << "index: " << *idx << '\n';  
+      kkc[pos].ap2[kkc[pos].icnt2].index = idx; // store the instruction about index     
+      // judege for case 123
+      BasicBlock *bb = inst->getParent(); 
+      if(isLoop(kkc, bb, pos, kkc[pos].icnt2, false))
       {
         kkc[pos].ap2[kkc[pos].icnt2].flag = 2;
       }                    
-      else if(isBr(kkc, bb, pos, kkc[pos].icnt2, false)) // if is a branch
+      else if(isBr(kkc, bb, pos, kkc[pos].icnt2, false)) 
       {
         kkc[pos].ap2[kkc[pos].icnt2].flag = 1;
       }
-      else  // if no
+      else 
       {
         kkc[pos].ap2[kkc[pos].icnt2].flag = 0;
       }
@@ -192,23 +177,22 @@ namespace {
 
     bool sameValues(Instruction *i1, Instruction *i2)
     {
-      if(i1->isSameOperationAs(i2, 0)) // should be the same operation
+      // should be the same operation
+      if(i1->isSameOperationAs(i2, 0)) 
       {
-        if(i1->getOpcode() == Instruction::Call) // is call instruction
+        // if is a call inst
+        if(i1->getOpcode() == Instruction::Call)
         {
           //errs() << "find:" << *i1 << "!!!AND!!!" << *i2 << '\n';
-          //Function *f1 = i1->getParent()->getParent();
-          //Function *f2 = i2->getParent()->getParent();
-          //errs() << "belong to: " << f1->getName() << " and " << f2->getName() << '\n';
           CallInst *cinst1 = dyn_cast<CallInst>(i1);
           CallInst *cinst2 = dyn_cast<CallInst>(i2); 
           StringRef func1  = cinst1->getCalledFunction()->getName();
           StringRef func2  = cinst2->getCalledFunction()->getName();
           Value *para1     = cinst1->getArgOperand(0);
           Value *para2     = cinst2->getArgOperand(0);
-          if(func1 == func2)  // should be same: e.g., get_local_id
+          if(func1 == func2)  // e.g., get_local_id
           {
-            if(para1 == para2)  // should be same: 0, 1, or 2
+            if(para1 == para2)  // e.g., 0, 1, or 2
             {
               return true;
             }
@@ -222,35 +206,35 @@ namespace {
             return false;
           }
         }
-
+        // if is not a call inst
         else
         {
           //errs() << "find:" << *i1 << "!!!AND!!!" << *i2 << '\n';
           int ocnt = i1->getNumOperands();
-          Value *v1[ocnt];
-          Value *v2[ocnt];
-          bool isSame[ocnt];
+          Value **v1 = new Value*[ocnt];
+          Value **v2 = new Value*[ocnt];
+          bool *isSame = new bool[ocnt];
           for(int i = 0; i < ocnt; i++)
           {
             v1[i] = i1->getOperand(i);
             v2[i] = i2->getOperand(i);
-            if(isa<Constant>(v1[i]) && isa<Constant>(v2[i]))  // both constants
+            // if both operands are constants
+            if(isa<Constant>(v1[i]) && isa<Constant>(v2[i])) 
             {
-              //errs() << "both" << *v1[i] << " and " << *v2[i] << " are constants\n";
-              std::string sv1 = formatv("{0}", *v1[i]).str(); 
-              std::string sv2 = formatv("{0}", *v2[i]).str();
-              if(sv1 == sv2)
+              //errs() << "both " << *v1[i] << " and " << *v2[i] << " are constants\n";
+              ConstantInt *c1 = dyn_cast<ConstantInt>(v1[i]);
+              ConstantInt *c2 = dyn_cast<ConstantInt>(v2[i]);
+              if(c1->getSExtValue() == c2->getSExtValue())
               {
-                //errs() << "and they are the same\n";
-                isSame[i] = true;
+                isSame[i] = true; //errs() << "and they are equal\n";
               } 
               else
-              {
-                //errs() <<"but they are not equal\n";
-                isSame[i] = false;
+              {               
+                isSame[i] = false;  //errs() <<"but they are not equal\n";
               }
             }
-            else if((!isa<Constant>(v1[i])) && (!isa<Constant>(v2[i]))) // both not
+            // if neighter operands are constants
+            else if((!isa<Constant>(v1[i])) && (!isa<Constant>(v2[i])))
             {
               Instruction *inst1 = dyn_cast<Instruction>(v1[i]);
               Instruction *inst2 = dyn_cast<Instruction>(v2[i]);
@@ -260,49 +244,19 @@ namespace {
               }
               else
               {
-                //!!!!!!!!!!!!
+                //!!!!!!!!!
                 //errs() << "they are not instruction: " << *v1[i] << "!!!AND!!!" << *v2[i] << '\n';               
                 std::string sv1 = formatv("{0}", *v1[i]).str(); 
                 std::string sv2 = formatv("{0}", *v2[i]).str();  
-                /*
-                Function *f1 = v1[i]->getParent()->getParent();
-                Function *f2 = v2[i]->getParent()->getParent();
-                int acnt  = -1;
-                int apos1 = -1;
-                int apos2 = -1;
-                for(Function::arg_iterator a = f1->arg_begin(), e = f1->arg_end(); a != e; a++) // all args for f1
-                {
-                  acnt++;
-                  std::string sa = formatv("{0}", *a).str();  // to string
-                  if(sv1 == sa)
-                  {
-                    apos1 = acnt;
-                    errs() << "it is the " << acnt+1 << "arg\n";
-                  }
-                }
-                acnt = -1;
-                for(Function::arg_iterator a = f2->arg_begin(), e = f2->arg_end(); a != e; a++) // all args for f2
-                {
-                  acnt++;
-                  std::string sa = formatv("{0}", *a).str();  // to string
-                  if(sv2 == sa)
-                  {
-                    apos2 = acnt;
-                    errs() << "it is the " << acnt+1 << "arg\n";
-                  }
-                }
-                */
                 if(sv1 == sv2)
                 {
                   // !!!!!!!!!!!!!!
-                  // should: determine its num in arg list, and go back to host to further judge
-                  //errs() << "and they are the same\n";
-                  isSame[i] = true;
+                  // should: determine its num in arg list, and go back to host to further judge                 
+                  isSame[i] = true; //errs() << "and they are the same\n";
                 } 
                 else
-                {
-                  //errs() <<"but they are not equal\n";
-                  isSame[i] = false;
+                {                  
+                  isSame[i] = false;  //errs() <<"but they are not equal\n";
                 }
               }
             }
@@ -327,7 +281,9 @@ namespace {
 
     bool runOnModule(Module &M) override {
 
-      // we need ccnt and cand[..] from InOut (host)
+      // we need ccnt and cand[..][4] from InOut.out
+      // ccnt: number of the pairs of candidates (same buffer, output->input)
+      // cand[..][4]: pairs of candidates
       int cand[10][4];
       std::string app = APP;
       std::string file = "/root/Work/llvm/apps/" + app + "/InOut.out";
@@ -343,31 +299,11 @@ namespace {
         ss >> cand[ccnt][3];
         ccnt++;
       }
-      /*
-      int ccnt = 4;
-      int cand[10][4] = { {0,1,1,0},
-                          {1,1,2,0},
-                          {1,2,2,2},
-                          {2,1,3,0}};
-      /*
-      int ccnt = 3;
-      int cand[10][4] = { {0,0,2,1},
-                          {0,3,1,1},
-                          {1,0,2,0}};
-      */
-      /*
-      int ccnt = 1;
-      int cand[10][4] = { {0,2,1,7}};
-      */
-      /*
-      //test for br
-      int ccnt = 1;
-      int cand[10][4] = { {0,0,1,0}};
-      */
+      // initialize kkc struct
       KKCP kkc[10];
       for(int i = 0; i < ccnt; i++)
       {
-        kkc[i].kernel1 = cand[i][0];  // store to kkc
+        kkc[i].kernel1 = cand[i][0]; 
         kkc[i].arg1    = cand[i][1];
         kkc[i].kernel2 = cand[i][2];
         kkc[i].arg2    = cand[i][3];
@@ -379,27 +315,25 @@ namespace {
       {        
         if(f->getCallingConv() == 76) // __kernel: 76
         {
-          kcnt++; //number of kernel
-          //errs() << "Function name: " << f->getName() << '\n';
-          //FunctionType *ty = f->getFunctionType();
-          //errs() << "numparams: " << ty->getNumParams() << '\n';          
+          kcnt++; // kernel id   
           int acnt = -1;
-          for(Function::arg_iterator a = f->arg_begin(), e = f->arg_end(); a != e; a++) // all args of the function
+          // for all args of the function
+          for(Function::arg_iterator a = f->arg_begin(), e = f->arg_end(); a != e; a++) 
           {
-            acnt++; //number of arg
+            acnt++; // arg id
             int pos1 = matchOut(cand, kcnt, acnt, ccnt);  // for the producer kernel
             int pos2 = matchIn(cand, kcnt, acnt, ccnt);   // for the consumer kernel
-            if(pos1 != -1)  // if (kcnt,acnt) is in cand: find this arg
+            // if (kcnt, acnt) is in cand: find its position
+            if(pos1 != -1)  
             {
               //errs() << "producer: " << *a << '\n';
-              std::string sa = formatv("{0}",*a).str(); // Argument(?) to string
               for(Function::iterator bb = f->begin(), e = f->end(); bb!=e; bb++)  // all basic blocks
               {
                 for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // all instructions
                 {
                   std::string si = formatv("{0}",*i).str();
-                  size_t idx = si.find(sa); // find all related instructions: gep instructions
-                  if(idx != -1)
+                  // find all related instructions: gep instructions
+                  if(si.find(a->getName()) != std::string::npos)
                   {
                     if(GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(i))
                     {
@@ -410,18 +344,17 @@ namespace {
               }
               kkc[pos1].icnt1++;             
             }
-                      
-            else if(pos2 != -1)  // if (kcnt,acnt) is in cand: find this arg
+            // if (kcnt, acnt) is in cand: find its position          
+            else if(pos2 != -1)
             {
               //errs() << "consumer: " << *a << '\n';
-              std::string sa = formatv("{0}",*a).str(); // Argument(?) to string
               for(Function::iterator bb = f->begin(), e = f->end(); bb!=e; bb++)  // all basic blocks
               {
                 for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // all instructions
                 {
                   std::string si = formatv("{0}",*i).str();
-                  size_t idx = si.find(sa); // find all related instructions: gep instructions
-                  if(idx != -1)
+                  // find all related instructions: gep instructions
+                  if(si.find(a->getName()) != std::string::npos)
                   {
                     if(GetElementPtrInst *gep = dyn_cast<GetElementPtrInst>(i))
                     {
@@ -439,38 +372,34 @@ namespace {
       for(int pos = 0; pos < ccnt; pos++)
       {
         kkc[pos].isKKC = true;  // initializtion
-        if(kkc[pos].icnt1 == kkc[pos].icnt2)  // num of instructions should be equal
+        // 1. the number of instructions should be equal
+        if(kkc[pos].icnt1 == kkc[pos].icnt2)  
         {
           int icnt = kkc[pos].icnt1;
           for(int i = 0; i < icnt; i++) // for each pair of instructions
           {
-            if(kkc[pos].ap1[i].flag == kkc[pos].ap2[i].flag)  // should be the same pattern: no branch loop
+            // 2. each pair: should be the same pattern (case 123)
+            if(kkc[pos].ap1[i].flag == kkc[pos].ap2[i].flag) 
             {
               int flag = kkc[pos].ap1[i].flag;
-              // 1 match the index
+              // 3.1. match the index
               Instruction *inst1 = kkc[pos].ap1[i].index;
               Instruction *inst2 = kkc[pos].ap2[i].index;
               if(sameValues(inst1, inst2)) // have same index
               {
-                if(flag == 1) // further for branch
+                if(flag == 1) 
                 {
-                  // 2 match the cmp
+                  // 3.2. for case 1: match the cmp
                   Instruction *cmp1 = kkc[pos].ap1[i].cmp;
                   Instruction *cmp2 = kkc[pos].ap2[i].cmp;
                   if(!sameValues(cmp1, cmp2))  // do not have the same condition
                   {
                     kkc[pos].isKKC = false;
                   }
-                  /*
-                  else
-                  {
-                    errs() << "!!!!!!!same condition!!!!!!!!!!!\n";
-                  }
-                  */
                 }
-                else if(flag == 2)  // further for loop
+                else if(flag == 2)  
                 {
-                  // 3 match for loop
+                  // 3.3. for case 2: match for loop
                   Instruction *cmp1 = kkc[pos].ap1[i].bound;
                   Instruction *cmp2 = kkc[pos].ap2[i].bound;
                   if(!sameValues(cmp1, cmp2))  // do not have the same condition
@@ -500,20 +429,24 @@ namespace {
         }
       }
 
-      // filter again
+      // 4. filter again: "false" subsets for "true" pairs
+      // e.g., if k2 & k3 is not KKC, then k1 & k3 or k2 & k4 or k1 & cannot be KKC 
       for(int tpos = 0; tpos < ccnt; tpos++)
       {
-        if(kkc[tpos].isKKC) // test for pos of (isKKC = true)
+        // test for all "true" pairs
+        if(kkc[tpos].isKKC) 
         {
           int tkernel1 = kkc[tpos].kernel1;
           int tkernel2 = kkc[tpos].kernel2;
-          for(int fpos = 0; fpos < ccnt; fpos++)  // go through pos of (isKKC = false)
+          // go through all "false" pairs
+          for(int fpos = 0; fpos < ccnt; fpos++) 
           {
             if(!kkc[fpos].isKKC)
             {
               int fkernel1 = kkc[fpos].kernel1;
               int fkernel2 = kkc[fpos].kernel2;
-              if(tkernel1 <= fkernel1 && tkernel2 >= fkernel2)  // subset is false!
+              // subset is "false"!
+              if(tkernel1 <= fkernel1 && tkernel2 >= fkernel2)
               {
                 kkc[tpos].isKKC = false;
               }
@@ -549,34 +482,6 @@ namespace {
           errs() << "true!!!!\n";
         else
           errs() << "false!!!!\n";
-      }
-      */
-      /*
-      bool res = false;
-      int kres[10][2];
-      int cnt = 0;
-      for(int i = 0; i < ccnt; i++)
-      {
-        if(kkc[i].isKKC)
-        {
-          res = true;
-          kres[cnt][0] = kkc[i].kernel1 + 1;
-          kres[cnt][1] = kkc[i].kernel2 + 1;
-          cnt++;
-        }
-      }
-      if(res)
-      {
-        errs() << "\t\tYes (";
-        for(int i = 0; i < cnt; i++)
-        {
-          errs() << " between kernel" << kres[i][0] << " and kernel" << kres[i][1] << ", ";
-        }
-        errs() << ")\n";
-      }
-      else
-      {
-        errs() << "\t\tNo\n";
       }
       */
       for(int i = 0; i < ccnt; i++)

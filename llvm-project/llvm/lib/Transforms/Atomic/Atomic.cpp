@@ -27,7 +27,7 @@ namespace {
 				{
 					if(CallInst *cinst = dyn_cast<CallInst>(i))
 					{
-						if(cinst->getCalledFunction()->getName().find("atomic") != -1)	// get the function called
+						if(cinst->getCalledFunction()->getName().find("atomic") != std::string::npos)	// get the function called
 						{
 							cnt++;
 						}

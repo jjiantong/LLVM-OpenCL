@@ -1,4 +1,4 @@
-#define APP "CEDD"
+#define APP "PS_2"
 
 #include <iostream>
 #include <sstream>
@@ -25,10 +25,10 @@ namespace {
 
     struct WGArg
     {
-      int kernel; // kernel id
-      int wgcnt;  // # wg args in this kernel
-      int acnt;   // # args in this kernel
-      Instruction *ska[10]; // the related clsetkernelarg
+      int kernel;           // kernel id
+      int wgcnt;            // number of wg args in this kernel
+      int acnt;             // number of args in this kernel
+      Instruction *ska[10]; // the related clSetKernelArg
     };
 
     bool findKernel(int k[], int tmp, int kcnt)
@@ -49,7 +49,7 @@ namespace {
         for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // instructions
         {
           std::string si = formatv("{0}", *i).str();                     
-          if(si.find(sp) != -1) // find n_work_groups
+          if(si.find(sp) != std::string::npos)
           {
             Instruction *inst = dyn_cast<Instruction>(i);
             if(inst->getOpcode() == Instruction:: GetElementPtr)  // GEP instruction
@@ -95,6 +95,14 @@ namespace {
       {
         return op1-op2;
       }
+      else if(otor == "lshr")
+      {
+        return op1>>op2;
+      }
+      else  // otor == "shl"
+      {
+        return op1<<op2;
+      }
     }
     // find gep recursively -> test whether the variable is related to n_work_items
     Instruction* findGEP(Instruction *inst, int cnt)  
@@ -111,7 +119,6 @@ namespace {
           }
           else if(i->getOpcode() == Instruction::GetElementPtr)
           {
-            //inst = i;
             return i;
           }
           else  // continue to find gep
@@ -119,84 +126,105 @@ namespace {
             return findGEP(i, cnt+1);
           }
         }
+        else
+        {
+          return NULL;
+        }
       }
+      return NULL;
     }
     // get the result of the value and another constant
     int computeConstant(Instruction *inst, int value, std::string otor)
     {
       Value *op0 = inst->getOperand(0);
       Value *op1 = inst->getOperand(1);
-      if(isa<Constant>(op0))  // if op0 is constant
+      // if op0 is a constant
+      if(isa<Constant>(op0)) 
       {
         ConstantInt *c = dyn_cast<ConstantInt>(op0);
         return compute(otor, c->getSExtValue(), value);
       }
-      else if(isa<Constant>(op1)) // if op1 is constant
+      // if op1 is a constant
+      else if(isa<Constant>(op1))
       {
         ConstantInt *c = dyn_cast<ConstantInt>(op1);
         return compute(otor, value, c->getSExtValue());
       }
-      else  // op0 and op1 are not constant -> exsit another variable except for n_work_groups and n_work_items
+      // op0 and op1 are not constant 
+      // -> exsit another variable except for "n_work_groups" and "n_work_items"
+      else  
       {
         return -1;
       }
     }
-    // from the gep of n_work_items, to the original inst
+    // from the gep of "n_work_items", to the original inst
     int GEPBack(Instruction *gep, Instruction *inst, int value)
     {
+      // find the original inst
       if(gep->isIdenticalTo(inst))
       {
         return value;
       }
-      else  // have not find: continue
+      // have not find -> continue
+      else 
       {
-        for(User *U: gep->users())  // gep is used in ?
-        {
-          //errs() << *U << '\n';
-          Instruction *i = dyn_cast<Instruction>(U);
+        // find where the gep is used in
+        for(User *U: gep->users())
+        {         
+          Instruction *i = dyn_cast<Instruction>(U);  //errs() << *U << '\n';
           switch(i->getOpcode())
           {
             // need to compute
             case Instruction::Mul:
               return computeConstant(i, value, "mul");
             case Instruction::UDiv:
+            case Instruction::SDiv:
               return computeConstant(i, value, "div");
             case Instruction::Add:
               return computeConstant(i, value, "add");
             case Instruction::Sub:
               return computeConstant(i, value, "sub");
+            case Instruction::LShr:
+              return computeConstant(i, value, "lshr");
+            case Instruction::Shl:
+              return computeConstant(i, value, "shl");
             default:
               return GEPBack(i, inst, value);
           }         
         }
+        return -1;
       }
     }
-    // compute the value of one operand (of the inst related to n_work_groups)
+    // compute the value of one operand (of the inst related to "n_work_groups")
     int computeOperand(Value *operand, int wi, int wipid)
     {
+      // if this value is a constant
       if(isa<Constant>(operand))
       {
         ConstantInt *c = dyn_cast<ConstantInt>(operand);
         return c->getSExtValue();
       }
+      // if is not a constant
+      // -> this value can be related to "n_work_items"
       else
       {
         Instruction *inst = dyn_cast<Instruction>(operand);
         if(Instruction *gep = dyn_cast<Instruction>(findGEP(inst, 0)))
         {
           std::string sgep = formatv("{0}", *gep).str();
-          if(sgep.find("%struct.Params") != -1) // if contains ".."
+          if(sgep.find("%struct.Params") != std::string::npos) // if contains ".."
           {
             Value *op2 = gep->getOperand(2); // op2 refers to the index
             ConstantInt *ci = dyn_cast<ConstantInt>(op2);
-            if(ci->getSExtValue() == wipid) // find the index
+            // if the index matches "n_work_items"
+            if(ci->getSExtValue() == wipid) 
             {
               //errs() << "find the gep: " << *gep << "\n";
               return GEPBack(gep, inst, wi);
             }
           }
         }
-        else  // not constant, and cannot find gep
+        else  // not a constant, and cannot find gep
         {
           return -1;
         }
@@ -206,24 +234,26 @@ namespace {
     // compute
     int computeValue(Instruction *inst, Instruction *op, std::string otor, int value, int wi, int wipid)
     {
-      Value *op0 = inst->getOperand(0);
-      Value *op1 = inst->getOperand(1);
-      //errs() << "op0: " << *op0 << '\n';
-      //errs() << "op1: " << *op1 << '\n';
+      Value *op0 = inst->getOperand(0); //errs() << "op0: " << *op0 << '\n';
+      Value *op1 = inst->getOperand(1); //errs() << "op1: " << *op1 << '\n';      
       if(Instruction *i0 = dyn_cast<Instruction>(op0))  // op0 is inst
       {
-        if(i0->isIdenticalTo(op)) // op0 is related to n_work_groups
+        // if op0 is related to "n_work_groups"
+        if(i0->isIdenticalTo(op))
         {
           int operand = computeOperand(op1, wi, wipid); // compute op1
           return compute(otor, value, operand);
         }
-        else  // op0 is not related to n_work_groups -> op1 must be related to n_work_groups
+        // if op0 is not related to "n_work_groups"
+        // -> op1 must be related to "n_work_groups"
+        else 
         {
           int operand = computeOperand(op0, wi, wipid); // compute op0
           return compute(otor, operand, value);
         }
       }
-      else  // op1 is related to n_work_groups
+      // if op1 is related to "n_work_groups"
+      else 
       {
         int operand = computeOperand(op0, wi, wipid); // compute op0
         return compute(otor, operand, value);
@@ -232,9 +262,11 @@ namespace {
 
     bool runOnModule(Module &M) override {
 
-      // 1. we need x and y[..] from NumKernels (kernel)
-      int x;  // # kernels
-      int y[10];  // # args for each kernel
+      // 1. we need x and y[..] from NumKernels.out
+      // x: number of kernels; 
+      // y[i]: number of args for each kernel
+      int x;  
+      int y[10]; 
       std::string app = APP;
       std::string file = "/root/Work/llvm/apps/" + app + "/NumKernels.out";
       std::ifstream fin(file);
@@ -249,7 +281,10 @@ namespace {
         ss >> y[i++];
       }
 
-      // 2. we need kernel pairs and Y/N from KKC (kernel)
+      // 2. we need kernel pairs and Y/N from KKC.out
+      // tmpk1, tmpk2: id of kernel pairs
+      // cond: Y/N about KKC
+      // and store to k[..]: all kernels in kernel pairs that are not KKC
       int k[10];
       int tmpk1, tmpk2;
       std::string cond;
@@ -263,47 +298,55 @@ namespace {
         std::stringstream ss(line2);
         ss >> tmpk1;
         ss >> tmpk2;
-        ss >> cond;
-        //errs() << cond << '\n';
-        if(cond == "N") // not KKC, can be MPS
+        ss >> cond; //errs() << cond << '\n';
+        // if not KKC -> can be MPS
+        if(cond == "N") 
         {
-          if(!findKernel(k, tmpk1, kcnt)) // not find
+          // have not stored in k
+          if(!findKernel(k, tmpk1, kcnt)) 
           {
             k[kcnt++] = tmpk1;
           }
-          if(!findKernel(k, tmpk2, kcnt)) // not find
+          // have not stored in k
+          if(!findKernel(k, tmpk2, kcnt)) 
           {
             k[kcnt++] = tmpk2;
           }
         }
-        else  // is KKC
+        // if is KKC -> cannot be MPS
+        else 
         {
-          if(!kkc)  // the first time
+          // the first pair
+          if(!kkc) 
           {
             errs() << "\t\tYes (";
             errs() << "between kernel" << tmpk1+1 << " and kernel" << tmpk2+1;
             kkc =  true;
           }
-          else  // not the first time
+          // not the first pair
+          else 
           {
             errs() << ", between kernel" << tmpk1+1 << " and kernel" << tmpk2+1;
           }
         }
       }
-      if(kkc) // is KKC
+      // is KKC
+      if(kkc)
       {
         errs() << ")\n";
       }
-      else  // is not KKC
+      // is not KKC
+      else 
       {
         errs() << "\t\tNo\n";
       }
-      if(kcnt == 0) // no kernel
+      // no kernel in kernel pairs that are not KKC -> cannot be KKC
+      if(kcnt == 0)
       {
-        errs() << -1 << '\n';  // cannot be MPS
+        errs() << -1 << '\n';
         return false;
       } 
-
+      // else: 
       errs() << kcnt << '\n';
       for(int i = 0; i < kcnt; i++)
       {
@@ -311,15 +354,19 @@ namespace {
       }
 
       // 3. we need to return __ kernel's __ arg = __
+      // wgcnt: number of wg args
+      // wgarg[..][0]: kernel id
+      // wgarg[..][1]: arg id
+      // wgarg[..][2]: value
       int wgcnt = 0;
       int wgarg[10][3];
       
-      // begin
+      // begin...
       // 1. find pid = ?
-      int wgpid = -1;  // index of n_work_groups in struct params
-      int wipid = -1;
-      int wgvalue = -1; // value of n_work_groups
-      int wivalue = -1;
+      int wgpid = -1;   // index of "n_work_groups" in struct params
+      int wipid = -1;   // index of "n_work_items" in struct params
+      int wgvalue = -1; // value of "n_work_groups"
+      int wivalue = -1; // value of "n_work_items"
       for(Module::iterator f = M.begin(), f2 = M.end(); f!=f2; f++) // functions
       { 
         if(f->getName() == "main")
@@ -330,9 +377,8 @@ namespace {
             {
               Instruction *inst = dyn_cast<Instruction>(i);
               if(inst->getOpcode() == Instruction::Call)
-              {
-                //errs() << "call: " << *inst << '\n';
-                CallInst *cinst = dyn_cast<CallInst>(inst);
+              {               
+                CallInst *cinst = dyn_cast<CallInst>(inst); //errs() << "call: " << *inst << '\n';
                 Function *func = cinst->getCalledFunction();  // get the called function
                 FunctionType *ty = func->getFunctionType();
                 int acnt = ty->getNumParams();  // num of args
@@ -340,11 +386,11 @@ namespace {
                 {
                   Value *arg = cinst->getArgOperand(i); // test for each arg
                   std::string sarg = formatv("{0}", *arg).str();
-                  if(sarg.find("%struct.Params") != -1) // if contains ".."
+                  if(sarg.find("%struct.Params") != std::string::npos) // if contains ".."
                   {
                     //errs() << "Function: " << func->getName() << '\n';
-                    wipid = findPid(func, "%n_work_items", &wivalue);   // find pid of n_work_items
-                    wgpid = findPid(func, "%n_work_groups", &wgvalue);  // find pid of n_work_groups                
+                    wipid = findPid(func, "%n_work_items", &wivalue);   // find pid and value of "n_work_items"
+                    wgpid = findPid(func, "%n_work_groups", &wgvalue);  // find pid and value of "n_work_groups"                
                     //errs() << "wg: " << wgpid << ", " << wgvalue << '\n';
                     //errs() << "wi: " << wipid << ", " << wivalue << '\n';
                     break;
@@ -361,7 +407,7 @@ namespace {
         return false;
       }
       
-      // 2. find potential clsetkernelarg inst
+      // 2. find potential clSetKernelArg inst
       WGArg wgArg[10];
       for(int i = 0; i < kcnt; i++)
       {
@@ -379,29 +425,30 @@ namespace {
           for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // instructions
           {
             std::string si = formatv("{0}",*i).str();
-            size_t idx = si.find("clSetKernelArg"); 
-            if(idx != -1) // find "clSetKernelArg"
+            if(si.find("clSetKernelArg") != std::string::npos)  // find "clSetKernelArg"
             {
               instcnt++;
               wgArg[xcnt].acnt++;
               Instruction *Inst = dyn_cast<Instruction>(i);
+              // find all args the "clSetKernelArg" inst uses
               int opcnt = 0;
-              for(Use &U: Inst->operands()) // find all instructions used by "clSetKernelArg"
+              for(Use &U: Inst->operands())
               {
                 Value *v = U.get();
                 opcnt++;
-                if(opcnt == 4 && formatv("{0}",*v).str().find("cl_mem") == -1)  // find what values the instruction uses
-                {                                                               // we need the 4th arg not using "cl_mem"
-                  if(instcnt >= cur) // change to next kernel
+                // we need the 4th arg not using "cl_mem"
+                if(opcnt == 4 && formatv("{0}",*v).str().find("cl_mem") == std::string::npos)  
+                {                                                               
+                  // change to next kernel
+                  if(instcnt >= cur) 
                   {
                     xcnt++;
                     cur += y[xcnt]; // next kernel's location boundary
                   }
-                  if(findKernel(k, xcnt, kcnt)) // if this kernel is in k[]
-                  {
-                    //Instruction *arg4 = dyn_cast<Instruction>(v); 
-                    //errs() << "find: " << *arg4 << '\n';   // find instruction
-                    wgArg[xcnt].ska[wgArg[xcnt].wgcnt] = Inst; 
+                  // if this kernel is in k[..]
+                  if(findKernel(k, xcnt, kcnt)) 
+                  {                    
+                    wgArg[xcnt].ska[wgArg[xcnt].wgcnt] = Inst;  //errs() << "find: " << *Inst << '\n';
                     wgArg[xcnt].wgcnt++;
                   }
                 }
@@ -421,7 +468,7 @@ namespace {
         }
       }
       */
-      // 3. find insts according to step 1, and test according to step 2 
+      // 3. find insts according to step 1 (gep, index), and test according to step 2 (suitable arg)
       for(Module::iterator f = M.begin(), f2 = M.end(); f!=f2; f++) // functions
       { 
         if(f->getName() == "main")
@@ -432,24 +479,23 @@ namespace {
             {
               Instruction *inst = dyn_cast<Instruction>(i);
               std::string sinst = formatv("{0}", *inst).str();
-              if(sinst.find("%struct.Params") != -1) // if contains ".."
+              if(sinst.find("%struct.Params") != std::string::npos) // if contains ".."
               {
                 if(inst->getOpcode() == Instruction::GetElementPtr)
                 {
                   Value *op2 = inst->getOperand(2); // op2 refers to the index
                   ConstantInt *ci = dyn_cast<ConstantInt>(op2);
-                  if(ci->getSExtValue() == wgpid) // find the index
-                  {
-                    //errs() << "find: " << *inst << '\n';  
-                    Instruction *inst2 = inst;                  
+                  // if the index matches "n_work_groups"
+                  if(ci->getSExtValue() == wgpid)
+                  {                   
+                    Instruction *inst2 = inst;  //errs() << "find: " << *inst << '\n';        
                     int value = 1;
                     bool stop = false;
                     while(!stop)
                     {
                       for(User *U: inst2->users())  // inst2 is used in ?
-                      {
-                        //errs() << *U << '\n';
-                        Instruction *Inst = dyn_cast<Instruction>(U);
+                      {                       
+                        Instruction *Inst = dyn_cast<Instruction>(U); //errs() << *U << '\n';
                         switch(Inst->getOpcode())
                         {
                           case Instruction::Invoke: // clSetKErnelArg
@@ -462,8 +508,7 @@ namespace {
                                   //errs() << "yes\n";
                                   wgarg[wgcnt][0] = wgArg[i].kernel;
                                   wgarg[wgcnt][1] = wgArg[i].acnt;
-                                  wgarg[wgcnt][2] = value;
-                                  //errs() << "value: " << value << '\n';
+                                  wgarg[wgcnt][2] = value;  //errs() << "value: " << value << '\n';                                 
                                   wgcnt++;
                                 }
                               }
@@ -471,9 +516,8 @@ namespace {
                             stop = true;
                             break;
                           case Instruction::Call: 
-                          case Instruction::Store:
-                            //errs() << "value: " << value << '\n';
-                            stop = true;
+                          case Instruction::Store:                           
+                            stop = true;  //errs() << "value: " << value << '\n';
                             break;
                           // continue
                           case Instruction::Mul:
@@ -504,10 +548,15 @@ namespace {
             }
           }
         }       
-      }
-      errs() << wgcnt << '\n';
+      }      
+      //errs() << wgcnt << '\n';
       for(int i = 0; i < wgcnt; i++)
       {
+        // invalid result
+        if(wgarg[i][2] < 0)
+        {
+          continue;
+        }
         errs() << wgarg[i][0] << ' ';
         errs() << wgarg[i][1] << ' ';
         errs() << wgarg[i][2] << '\n';

@@ -1,4 +1,4 @@
-#define APP "CEDD"
+#define APP "PS_2"
 
 #include <iostream>
 #include <sstream>
@@ -51,7 +51,7 @@ namespace {
             }
             if(flag) 
             {
-              flag = 0; // break and break: to judge next instruction
+              flag = 0; // break 2 loops: to judge next instruction
               break;
             }
           }
@@ -97,12 +97,11 @@ namespace {
           for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // instructions
           { 
             std::string si = formatv("{0}",*i).str();
-            if(si.find("clSetKernelArg") != -1) // find "clSetKernelArg"
-            { 
-              //errs() << *i << '\n';
+            if(si.find("clSetKernelArg") != std::string::npos)  // find "clSetKernelArg"
+            {              
               instcnt++;
               ycnt++;
-              Instruction *Inst = dyn_cast<Instruction>(i);
+              Instruction *Inst = dyn_cast<Instruction>(i); //errs() << *i << '\n';
               // find all args the "clSetKernelArg" inst uses
               int opcnt = 0;              
               for(Use &U: Inst->operands()) 
@@ -110,10 +109,9 @@ namespace {
                 Value *v = U.get();
                 opcnt++;
                 // we need the 4th arg with "cl_mem"
-                if(opcnt == 4 && formatv("{0}",*v).str().find("cl_mem") != -1)  
+                if(opcnt == 4 && formatv("{0}",*v).str().find("cl_mem") != std::string::npos)  
                 { 
-                  Instruction *arg4 = dyn_cast<Instruction>(v);                  
-                  //errs() << "find : " << *arg4 << '\n';  // find instruction
+                  Instruction *arg4 = dyn_cast<Instruction>(v); //errs() << "find : " << *arg4 << '\n';                 
                   // the same kernel
                   if(instcnt < cur)
                   {

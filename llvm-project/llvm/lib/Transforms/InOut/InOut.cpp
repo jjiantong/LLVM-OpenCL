@@ -1,4 +1,4 @@
-#define APP "CEDD"
+#define APP "PS_2"
 
 #include <iostream>
 #include <sstream>
@@ -25,7 +25,7 @@ namespace {
     struct RW
     {
       int kernel;   // kernel id
-      int arg;      // arg is
+      int arg;      // arg id
       bool read;    // load or not
       bool write;   // store or not
     };
@@ -89,7 +89,6 @@ namespace {
         if(f->getCallingConv() == 76) // __kernel: 76
         {
           kcnt++;
-          //errs() << "Function name: " << f->getName() << '\n';          
           int acnt = -1;
           for(Function::arg_iterator a = f->arg_begin(), e = f->arg_end(); a != e; a++) // all args of the function
           {
@@ -99,17 +98,15 @@ namespace {
             if(pos != -1)
             {
               //errs() << *a << '\n';
-              std::string sa = formatv("{0}",*a).str(); // to string
               for(Function::iterator bb = f->begin(), e = f->end(); bb!=e; bb++)  // all basic blocks
               {
                 for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // all instructions
                 {
                   std::string si = formatv("{0}",*i).str(); // to string
                   // find the related instructions: a gep instruction
-                  if(si.find(sa) != -1)
-                  {
-                    //errs() << "inst: " << *i << '\n';
-                    Instruction *i2 = dyn_cast<Instruction>(i);
+                  if(si.find(a->getName()) != std::string::npos)
+                  {                   
+                    Instruction *i2 = dyn_cast<Instruction>(i); //errs() << "inst: " << *i << '\n';
                     // until find the load or store operation
                     while(i2->getOpcode() != Instruction::Load
                         && i2->getOpcode() != Instruction::Store) 

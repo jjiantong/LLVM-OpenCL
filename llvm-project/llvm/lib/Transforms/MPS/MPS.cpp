@@ -26,16 +26,16 @@ namespace {
 
     struct BBList
     {
-      BasicBlock *bb;
-      std::string name;
-      bool keep;
+      BasicBlock *bb;     // bb
+      std::string name;   // name of bb
+      bool keep;          // delete or not
     };
     
     struct KList
     {
-      int kid;  // not all kernels need to test
-      int bbcnt;
-      BBList bbList[40];
+      int kid;            // kernel id
+      int bbcnt;          // number of bb
+      BBList bbList[40];  // bbList
     };
 
     int findKernel(KList kList[], int kcnt, int k)
@@ -94,7 +94,6 @@ namespace {
         case Instruction::ICmp:
         {
           ICmpInst *icmp = dyn_cast<ICmpInst>(inst);
-          //errs() << icmp->getPredicate() << '\n';
           switch(icmp->getPredicate())
           {
             case CmpInst::Predicate::ICMP_EQ:   // equal
@@ -113,15 +112,18 @@ namespace {
             case CmpInst::Predicate::ICMP_ULE:  // unsigned less or equal
             case CmpInst::Predicate::ICMP_SLE:  // signed less or equal
               return op1<=op2 ? 1:0;
+            default:
+              return -100;  // do not consider FCmpInst
           }
         }
+        default:
+          return -100;
       }
     }
     // recursively find the bb's terminator, and compute the value
     int findTerminator(BasicBlock *bb, Instruction *inst, std::string vname, int value)
     {
-      //errs() << "inst: " << *inst << '\n';
-      //errs() << "value: " << value << '\n';
+      //errs() << "inst: " << *inst << '\n';  //errs() << "value: " << value << '\n';
       if(inst == bb->getTerminator())  // end
       {
         //errs() << "terminator\n";
@@ -149,17 +151,23 @@ namespace {
           case Instruction::ICmp:
           case Instruction::LShr:
           case Instruction::Add:
+          case Instruction::Sub:
+          case Instruction::Mul:
+          case Instruction::UDiv:
+          case Instruction::SDiv:
           {
             Value *op0 = inst->getOperand(0);
             Value *op1 = inst->getOperand(1);
             std::string sop0 = formatv("{0}", *op0).str();
             std::string sop1 = formatv("{0}", *op1).str();
-            if(isa<Constant>(op0) && sop1.find(vname) != -1) // op0 is constant, op1 uses the value
+            // op0 is constant, op1 uses the value
+            if(isa<Constant>(op0) && sop1.find(vname) != std::string::npos) 
             {
               ConstantInt *c0 = dyn_cast<ConstantInt>(op0);
               value = computeValue(inst, c0->getSExtValue(), value);
             }
-            else if(isa<Constant>(op1) && sop0.find(vname) != -1)  // op1 is constant, op0 uses the value
+            // op1 is constant, op0 uses the value
+            else if(isa<Constant>(op1) && sop0.find(vname) != std::string::npos)
             {
               ConstantInt *c1 = dyn_cast<ConstantInt>(op1);
               value = computeValue(inst, value, c1->getSExtValue());
@@ -169,9 +177,9 @@ namespace {
               value = -100;
             }
             break;
-          }          
+          }       
         }        
-        int ucnt = inst->getNumUses();  // the number of users
+        int ucnt = inst->getNumUses();  // get the number of users
         int res[10];
         int cnt = 0;
         for(User *U: inst->users())
@@ -179,7 +187,8 @@ namespace {
           Instruction *i = dyn_cast<Instruction>(U);
           res[cnt++] = findTerminator(bb, i, inst->getName(), value); // do for each users
         }
-        if(inst->hasNUsesOrMore(2)) // if inst has 2 users or more
+        // if inst has 2 users or more
+        if(inst->hasNUsesOrMore(2))
         {
           for(int i = 0; i < ucnt; i++)
           {
@@ -189,10 +198,16 @@ namespace {
             }
           }
         }
-        else  // if inst has 1 user (usually)
+        // if inst has 1 user (usually)
+        else if(inst->hasOneUse())
         {
           return res[0];
         }
+        else
+        {
+          return -100;
+        }
+        return -100;
       }
     }
 
@@ -207,7 +222,6 @@ namespace {
       {
         return true;
       }
-      //Instruction *last_inst = bb->getTerminator();
       bool ret = false;
       for(succ_iterator s = succ_begin(bb), e = succ_end(bb); s!=e; s++)  // for all successors
       {
@@ -227,9 +241,8 @@ namespace {
       {
         // 2.1. testbb has only one predecessor
         if(tbb->hasNPredecessors(1))
-        {
-          //errs() << "delete: " << tbb->getName() << '\n';
-          kList[pos].bbList[bbpos].keep = false;          
+        {         
+          kList[pos].bbList[bbpos].keep = false;  //errs() << "delete: " << tbb->getName() << '\n';         
           for(succ_iterator s = succ_begin(tbb), e = succ_end(tbb); s!=e; s++)
           {
             BasicBlock *dest = dyn_cast <BasicBlock>(*s);
@@ -240,17 +253,14 @@ namespace {
         else 
         {
           for(pred_iterator p = pred_begin(tbb), e = pred_end(tbb); p!=e; p++)
-          {
-            //errs() << "preds: " << **p << '\n';
-            BasicBlock *prebb = dyn_cast<BasicBlock>(*p);
-            //errs() << "preds: " << prebb->getName() << '\n';
+          {           
+            BasicBlock *prebb = dyn_cast<BasicBlock>(*p); //errs() << "preds: " << **p << '\n';errs() << "preds: " << prebb->getName() << '\n';          
             if(prebb != pbb)  // find the another predecessor
             {
               // test for the another predecessor: we can handle 3-nested loops (branches)
               if(findPreds(prebb, tbb, 0))
-              {
-                //errs() << "delete: " << tbb->getName() << '\n';
-                kList[pos].bbList[bbpos].keep = false;               
+              {             
+                kList[pos].bbList[bbpos].keep = false;  //errs() << "delete: " << tbb->getName() << '\n';              
                 for(succ_iterator s = succ_begin(tbb), e = succ_end(tbb); s!=e; s++)
                 {
                   BasicBlock *dest = dyn_cast <BasicBlock>(*s);
@@ -265,10 +275,17 @@ namespace {
     
     bool runOnModule(Module &M) override {
 
-      // 1. we need kcnt and k[..] from WGArgs (host)
+      // 1. we need kcnt and k[..] from WGArgs.out
+      // kcnt: number of kernels need to be considered (kernels in kernel pairs that are not KKC)
+      // k[..]: kernels need to be considered
+      // and store to kList[..]
       int kcnt = 0;
       KList kList[10];
-      // 2. we need __ kernel's __ arg = __ from WGArgs (host)
+      // 2. we need __ kernel's __ arg = __ from WGArgs.out
+      // wgacnt: number of wg args
+      // wgarg[..][0]: kernel id
+      // wgarg[..][1]: arg id
+      // wgarg[..][2]: value
       int wgacnt = 0;
       int wgarg[10][3];
       bool arg;
@@ -288,26 +305,21 @@ namespace {
         std::stringstream ss(line);
         ss >> kList[i++].kid;
       }
-      fin.getline(line, sizeof(line));  // the number of wg args
-      std::stringstream ssa(line);
-      ssa >> wgacnt;
-      i = 0;
+
       while(fin.getline(line, sizeof(line)))
       {
         std::stringstream sswg(line);
-        sswg >> wgarg[i][0];
-        sswg >> wgarg[i][1];
-        sswg >> wgarg[i][2];
-        i++;
+        sswg >> wgarg[wgacnt][0];
+        sswg >> wgarg[wgacnt][1];
+        sswg >> wgarg[wgacnt][2];
+        wgacnt++;
       }
       if(wgacnt > 0)
       {
-        //errs() << "true\n";
         arg = true;
       }
       else
       {
-        //errs() << "false\n";
         arg = false;
       }
 
@@ -318,13 +330,13 @@ namespace {
         {
           k++;
           int pos = findKernel(kList, kcnt, k);
-          if(pos != -1) // need to test this kernel
+          // if k is in kList: find its position
+          if(pos != -1) 
           {
             kList[pos].bbcnt = 0;
             for(Function::iterator bb = f->begin(), e = f->end(); bb!=e; bb++)  // basic blocks
             {
-              BasicBlock *bbtmp = dyn_cast<BasicBlock>(bb);
-              //errs() << bbtmp->getName() << '\n';
+              BasicBlock *bbtmp = dyn_cast<BasicBlock>(bb); //errs() << bbtmp->getName() << '\n';            
               kList[pos].bbList[kList[pos].bbcnt].bb = bbtmp;
               kList[pos].bbList[kList[pos].bbcnt].name = bbtmp->getName();
               kList[pos].bbList[kList[pos].bbcnt].keep = true;
@@ -343,6 +355,7 @@ namespace {
         } 
       }
 */
+      // if there are kernels need to be considered
       if(arg)
       {
         int k = -1;
@@ -355,37 +368,38 @@ namespace {
             for(Function::arg_iterator a = f->arg_begin(), e = f->arg_end(); a != e; a++)
             {
               acnt++;
+              // if (k, acnt) is in wgarg: get its value
               int value = match(wgarg, wgacnt, k, acnt);
-              if(value != -1) // kernel-arg need to be considered
+              if(value != -1) 
               {
-                int pos = findKernel(kList, kcnt, k); // find the pos of this kernel in kList
-                //errs() << a->getName() << '\n';
+                // and find the position of k
+                int pos = findKernel(kList, kcnt, k);   //errs() << a->getName() << '\n';            
                 for(Function::iterator bb = f->begin(), e = f->end(); bb!=e; bb++)  // all basic blocks
                 {
                   for(BasicBlock::iterator i = bb->begin(), i2 = bb->end(); i!=i2; i++) // all instructions
                   {
                     std::string si = formatv("{0}",*i).str();
-                    size_t idx = si.find(a->getName()); // find the related instructions
-                    if(idx != -1)
-                    {
-                      //errs() << "inst: " << *i << '\n';
-                      Instruction *inst = dyn_cast<Instruction>(i);
+                    if(si.find(a->getName()) != std::string::npos)  // find the related instructions
+                    {                  
+                      Instruction *inst = dyn_cast<Instruction>(i); //errs() << "inst: " << *i << '\n';
                       BasicBlock *ibb = inst->getParent();
-                      int bbpos = findBB(kList, pos, ibb);  // find its parrent bb's situation
-                      if(kList[pos].bbList[bbpos].keep) // this inst is need to considered only when its situation now is yes
+                      // find the position of its parent bb
+                      int bbpos = findBB(kList, pos, ibb); 
+                      // this inst needs to be considered only when its situation now is "true"
+                      if(kList[pos].bbList[bbpos].keep) 
                       {
-                        //errs() << "parent bb: " << kList[pos].bbList[bbpos].name << '\n';
-                        int res = findTerminator(ibb, inst, a->getName(), value);
-                        //errs() << "result value: " << res << '\n';
+                        int res = findTerminator(ibb, inst, a->getName(), value); //errs() << "parent bb: " << kList[pos].bbList[bbpos].name << '\n';//errs() << "result value: " << res << '\n';                      
+                        // valid result
                         if(res != -100)
                         {
                           Instruction *last_inst = ibb->getTerminator();
                           if(BranchInst *br_inst = dyn_cast<BranchInst>(last_inst))
                           {
-                            if(br_inst->isConditional())  // conditional
+                            // this inst needs to be considered only when it leads to a definite branch
+                            // it should be a conditional branch
+                            if(br_inst->isConditional())
                             {
-                              BasicBlock *dest;
-                              //errs() << "br: " << *br_inst << '\n';
+                              BasicBlock *dest; //errs() << "br: " << *br_inst << '\n';                             
                               if(res == 1)
                               {
                                 dest = br_inst->getSuccessor(1);
@@ -409,25 +423,22 @@ namespace {
         }
       }
       for(int i = 0; i < kcnt; i++)
-      {
-        errs() << i << '\n';
+      { //errs() << i << '\n';       
         int y = 0;
         int n = 0;
         for(int j = 0; j < kList[i].bbcnt; j++)
-        {
-          errs() << "bb: " << kList[i].bbList[j].name << ":\t";
+        { //errs() << "bb: " << kList[i].bbList[j].name << ":\t";         
           if(kList[i].bbList[j].keep)
-          {
-            errs() << "y\n";
-            y++;
+          {           
+            y++;  //errs() << "y\n";
           }
           else
-          {
-            errs() << "n\n";
-            n++;
+          {           
+            n++;  //errs() << "n\n";
           }
         }
-        if(n > y) // delete more than half
+        // if we delete more than half of the bbs
+        if(n > y)
         {
           errs() << "\t\tYes\n";
           return false;
