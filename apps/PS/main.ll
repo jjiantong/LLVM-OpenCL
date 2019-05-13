@@ -289,7 +289,7 @@ $_ZNSt8_Rb_treeINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt4pairIKS5_
 @.str.22 = private unnamed_addr constant [20 x i8] c"Using %d device(s)\0A\00", align 1
 @.str.23 = private unnamed_addr constant [6 x i8] c"  %s\0A\00", align 1
 @.str.24 = private unnamed_addr constant [4 x i8] c"%s\09\00", align 1
-@.str.25 = private unnamed_addr constant [19 x i8] c"simd4-1-16_cu8-1-1\00", align 1
+@.str.25 = private unnamed_addr constant [11 x i8] c"baseline_2\00", align 1
 @.str.26 = private unnamed_addr constant [16 x i8] c"\0AUsing AOCX:%s\0A\00", align 1
 @.str.27 = private unnamed_addr constant [4 x i8] c"-I.\00", align 1
 @.str.28 = private unnamed_addr constant [1 x i8] zeroinitializer, align 1
@@ -2276,7 +2276,7 @@ if.then39:                                        ; preds = %if.end27
 if.end41:                                         ; preds = %if.end27
   %clDeviceID42 = getelementptr inbounds %struct.OpenCLSetup, %struct.OpenCLSetup* %this1, i32 0, i32 6
   %51 = load %struct._cl_device_id*, %struct._cl_device_id** %clDeviceID42, align 8
-  call void @_ZN10aocl_utils18getBoardBinaryFileB5cxx11EPKcP13_cl_device_id(%"class.std::__cxx11::basic_string"* sret %binary_file, i8* getelementptr inbounds ([19 x i8], [19 x i8]* @.str.25, i64 0, i64 0), %struct._cl_device_id* %51)
+  call void @_ZN10aocl_utils18getBoardBinaryFileB5cxx11EPKcP13_cl_device_id(%"class.std::__cxx11::basic_string"* sret %binary_file, i8* getelementptr inbounds ([11 x i8], [11 x i8]* @.str.25, i64 0, i64 0), %struct._cl_device_id* %51)
   %call43 = call i8* @_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv(%"class.std::__cxx11::basic_string"* %binary_file) #3
   %call46 = invoke i32 (i8*, ...) @printf(i8* getelementptr inbounds ([16 x i8], [16 x i8]* @.str.26, i64 0, i64 0), i8* %call43)
           to label %invoke.cont45 unwind label %lpad44

@@ -1,4 +1,4 @@
-#define APP "PS_2"
+#define APP "RSCD"
 
 #include <iostream>
 #include <sstream>
@@ -334,11 +334,13 @@ namespace {
       if(kkc)
       {
         errs() << ")\n";
+        errs() << "1\n";
       }
       // is not KKC
       else 
       {
         errs() << "\t\tNo\n";
+        errs() << "0\n";
       }
       // no kernel in kernel pairs that are not KKC -> cannot be KKC
       if(kcnt == 0)

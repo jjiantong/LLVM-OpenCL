@@ -48,15 +48,17 @@ void ScanLargeArrays_kernel(__global int *restrict output,
 	}
 	barrier(CLK_LOCAL_MEM_FENCE);
 		
-    /* store the value in sum buffer before making it to 0 */ 	
-	sumBuffer[bid] = block[block_size - 1];
+    if (tid == 0)
+	{
+		/* store the value in sum buffer before making it to 0 */ 	
+		sumBuffer[bid] = block[block_size - 1];
+				
+		/* scan back down the tree */
 
-	barrier(CLK_LOCAL_MEM_FENCE | CLK_GLOBAL_MEM_FENCE);
+		/* clear the last element */
+		block[block_size - 1] = 0;	
+	}
 	
-    /* scan back down the tree */
-
-    /* clear the last element */
-	block[block_size - 1] = 0;	
 
     /* traverse down the tree building the scan in the place */
 	for(int d = 1; d < block_size ; d *= 2)

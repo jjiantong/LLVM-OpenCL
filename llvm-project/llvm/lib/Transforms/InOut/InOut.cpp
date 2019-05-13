@@ -1,4 +1,4 @@
-#define APP "PS_2"
+#define APP "RSCD"
 
 #include <iostream>
 #include <sstream>

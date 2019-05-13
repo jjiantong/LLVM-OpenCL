@@ -43,18 +43,8 @@ for.cond:                                         ; preds = %if.end, %entry
   br i1 %cmp, label %for.cond.cleanup, label %for.body
 
 for.cond.cleanup:                                 ; preds = %for.cond
-  %sub32 = add i32 %block_size, -1
-  %idxprom33 = zext i32 %sub32 to i64
-  %arrayidx34 = getelementptr inbounds [512 x i32], [512 x i32]* @ScanLargeArrays_kernel.block, i64 0, i64 %idxprom33
-  %2 = load i32, i32* %arrayidx34, align 4, !tbaa !7
-  %sext = shl i64 %call3, 32
-  %idxprom35 = ashr exact i64 %sext, 32
-  %arrayidx36 = getelementptr inbounds i32, i32* %sumBuffer, i64 %idxprom35
-  store i32 %2, i32* %arrayidx36, align 4, !tbaa !7
-  tail call void @barrier(i32 3) #2
-  store i32 0, i32* %arrayidx34, align 4, !tbaa !7
-  %cmp42127 = icmp ugt i32 %block_size, 1
-  br i1 %cmp42127, label %for.body45, label %for.cond.cleanup44
+  %cmp32 = icmp eq i32 %conv, 0
+  br i1 %cmp32, label %if.then34, label %if.end43
 
 for.body:                                         ; preds = %for.cond
   %cmp16 = icmp sgt i32 %d.0, %conv
@@ -67,11 +57,11 @@ if.then:                                          ; preds = %for.body
   %sub24 = add nsw i32 %mul23, -1
   %idxprom25 = sext i32 %sub to i64
   %arrayidx26 = getelementptr inbounds [512 x i32], [512 x i32]* @ScanLargeArrays_kernel.block, i64 0, i64 %idxprom25
-  %3 = load i32, i32* %arrayidx26, align 4, !tbaa !7
+  %2 = load i32, i32* %arrayidx26, align 4, !tbaa !7
   %idxprom27 = sext i32 %sub24 to i64
   %arrayidx28 = getelementptr inbounds [512 x i32], [512 x i32]* @ScanLargeArrays_kernel.block, i64 0, i64 %idxprom27
-  %4 = load i32, i32* %arrayidx28, align 4, !tbaa !7
-  %add29 = add nsw i32 %4, %3
+  %3 = load i32, i32* %arrayidx28, align 4, !tbaa !7
+  %add29 = add nsw i32 %3, %2
   store i32 %add29, i32* %arrayidx28, align 4, !tbaa !7
   br label %if.end
 
@@ -79,45 +69,61 @@ if.end:                                           ; preds = %if.then, %for.body
   %mul30 = shl nsw i32 %offset.0, 1
   br label %for.cond
 
-for.cond.cleanup44:                               ; preds = %for.inc70, %for.cond.cleanup
+if.then34:                                        ; preds = %for.cond.cleanup
+  %sub35 = add i32 %block_size, -1
+  %idxprom36 = zext i32 %sub35 to i64
+  %arrayidx37 = getelementptr inbounds [512 x i32], [512 x i32]* @ScanLargeArrays_kernel.block, i64 0, i64 %idxprom36
+  %4 = load i32, i32* %arrayidx37, align 4, !tbaa !7
+  %sext = shl i64 %call3, 32
+  %idxprom38 = ashr exact i64 %sext, 32
+  %arrayidx39 = getelementptr inbounds i32, i32* %sumBuffer, i64 %idxprom38
+  store i32 %4, i32* %arrayidx39, align 4, !tbaa !7
+  store i32 0, i32* %arrayidx37, align 4, !tbaa !7
+  br label %if.end43
+
+if.end43:                                         ; preds = %if.then34, %for.cond.cleanup
+  %cmp46132 = icmp ugt i32 %block_size, 1
+  br i1 %cmp46132, label %for.body49, label %for.cond.cleanup48
+
+for.cond.cleanup48:                               ; preds = %for.inc74, %if.end43
   tail call void @barrier(i32 1) #2
   %5 = load i32, i32* %arrayidx7, align 8, !tbaa !7
-  %arrayidx78 = getelementptr inbounds i32, i32* %output, i64 %idxprom
-  store i32 %5, i32* %arrayidx78, align 4, !tbaa !7
+  %arrayidx82 = getelementptr inbounds i32, i32* %output, i64 %idxprom
+  store i32 %5, i32* %arrayidx82, align 4, !tbaa !7
   %6 = load i32, i32* %arrayidx14, align 4, !tbaa !7
-  %arrayidx86 = getelementptr inbounds i32, i32* %output, i64 %idxprom9
-  store i32 %6, i32* %arrayidx86, align 4, !tbaa !7
+  %arrayidx90 = getelementptr inbounds i32, i32* %output, i64 %idxprom9
+  store i32 %6, i32* %arrayidx90, align 4, !tbaa !7
   ret void
 
-for.body45:                                       ; preds = %for.cond.cleanup, %for.inc70
-  %offset.1129 = phi i32 [ %shr46, %for.inc70 ], [ %offset.0, %for.cond.cleanup ]
-  %d40.0128 = phi i32 [ %mul71, %for.inc70 ], [ 1, %for.cond.cleanup ]
-  %shr46 = ashr i32 %offset.1129, 1
+for.body49:                                       ; preds = %if.end43, %for.inc74
+  %offset.1134 = phi i32 [ %shr50, %for.inc74 ], [ %offset.0, %if.end43 ]
+  %d44.0133 = phi i32 [ %mul75, %for.inc74 ], [ 1, %if.end43 ]
+  %shr50 = ashr i32 %offset.1134, 1
   tail call void @barrier(i32 1) #2
-  %cmp47 = icmp sgt i32 %d40.0128, %conv
-  br i1 %cmp47, label %if.then49, label %for.inc70
+  %cmp51 = icmp sgt i32 %d44.0133, %conv
+  br i1 %cmp51, label %if.then53, label %for.inc74
 
-if.then49:                                        ; preds = %for.body45
-  %mul53 = mul nsw i32 %shr46, %add12
-  %sub54 = add nsw i32 %mul53, -1
-  %mul58 = mul nsw i32 %shr46, %add22
-  %sub59 = add nsw i32 %mul58, -1
-  %idxprom60 = sext i32 %sub54 to i64
-  %arrayidx61 = getelementptr inbounds [512 x i32], [512 x i32]* @ScanLargeArrays_kernel.block, i64 0, i64 %idxprom60
-  %7 = load i32, i32* %arrayidx61, align 4, !tbaa !7
-  %idxprom62 = sext i32 %sub59 to i64
-  %arrayidx63 = getelementptr inbounds [512 x i32], [512 x i32]* @ScanLargeArrays_kernel.block, i64 0, i64 %idxprom62
-  %8 = load i32, i32* %arrayidx63, align 4, !tbaa !7
-  store i32 %8, i32* %arrayidx61, align 4, !tbaa !7
-  %9 = load i32, i32* %arrayidx63, align 4, !tbaa !7
-  %add68 = add nsw i32 %9, %7
-  store i32 %add68, i32* %arrayidx63, align 4, !tbaa !7
-  br label %for.inc70
+if.then53:                                        ; preds = %for.body49
+  %mul57 = mul nsw i32 %shr50, %add12
+  %sub58 = add nsw i32 %mul57, -1
+  %mul62 = mul nsw i32 %shr50, %add22
+  %sub63 = add nsw i32 %mul62, -1
+  %idxprom64 = sext i32 %sub58 to i64
+  %arrayidx65 = getelementptr inbounds [512 x i32], [512 x i32]* @ScanLargeArrays_kernel.block, i64 0, i64 %idxprom64
+  %7 = load i32, i32* %arrayidx65, align 4, !tbaa !7
+  %idxprom66 = sext i32 %sub63 to i64
+  %arrayidx67 = getelementptr inbounds [512 x i32], [512 x i32]* @ScanLargeArrays_kernel.block, i64 0, i64 %idxprom66
+  %8 = load i32, i32* %arrayidx67, align 4, !tbaa !7
+  store i32 %8, i32* %arrayidx65, align 4, !tbaa !7
+  %9 = load i32, i32* %arrayidx67, align 4, !tbaa !7
+  %add72 = add nsw i32 %9, %7
+  store i32 %add72, i32* %arrayidx67, align 4, !tbaa !7
+  br label %for.inc74
 
-for.inc70:                                        ; preds = %for.body45, %if.then49
-  %mul71 = shl nsw i32 %d40.0128, 1
-  %cmp42 = icmp ult i32 %mul71, %block_size
-  br i1 %cmp42, label %for.body45, label %for.cond.cleanup44
+for.inc74:                                        ; preds = %for.body49, %if.then53
+  %mul75 = shl nsw i32 %d44.0133, 1
+  %cmp46 = icmp ult i32 %mul75, %block_size
+  br i1 %cmp46, label %for.body49, label %for.cond.cleanup48
 }
 
 ; Function Attrs: convergent

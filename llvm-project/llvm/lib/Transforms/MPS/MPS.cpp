@@ -1,4 +1,4 @@
-#define APP "PS_2"
+#define APP "RSCD"
 
 #include <iostream>
 #include <sstream>
@@ -276,8 +276,8 @@ namespace {
     bool runOnModule(Module &M) override {
 
       // 1. we need kcnt and k[..] from WGArgs.out
-      // kcnt: number of kernels need to be considered (kernels in kernel pairs that are not KKC)
-      // k[..]: kernels need to be considered
+      // kcnt: number of kernels to consider (kernels in kernel pairs that are not KKC)
+      // k[..]: kernels to consider
       // and store to kList[..]
       int kcnt = 0;
       KList kList[10];
@@ -295,6 +295,7 @@ namespace {
       std::ifstream fin(file);
       char line[20];
       fin.getline(line, sizeof(line));  // first line: no use
+      fin.getline(line, sizeof(line));  // second line: no use
       fin.getline(line, sizeof(line));
       std::stringstream ssk(line);
       ssk >> kcnt;  // the number of kernels
@@ -355,7 +356,7 @@ namespace {
         } 
       }
 */
-      // if there are kernels need to be considered
+      // if there are args be consider
       if(arg)
       {
         int k = -1;
@@ -441,10 +442,12 @@ namespace {
         if(n > y)
         {
           errs() << "\t\tYes\n";
+          errs() << "1\n";
           return false;
         }
       }
       errs() << "\t\tNo\n";
+      errs() << "0\n";
       return false;
     }
   };

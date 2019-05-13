@@ -38,10 +38,12 @@ namespace {
 		if(cnt)
 		{
 			errs() << "\t\tYes (" << cnt << " AOs)\n";
+			errs() << "1\n";
 		}			
 		else
 		{
 			errs() << "\t\tNo\n";
+			errs() << "0\n";
 		}			
     	return false;
     }
