@@ -1,4 +1,4 @@
-#define APP "RSCD"
+#define APP "BFS"
 
 #include <iostream>
 #include <sstream>

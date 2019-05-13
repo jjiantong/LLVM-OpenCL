@@ -2,11 +2,10 @@
 
 ls apps/ && read -p "Please choose an application: " app
 [ "$app" == "RSCD" ] && name=baseline_2 || name=baseline
-cd apps/$app
 
 # rebuild for the specific application
 echo -e "\n--------Rebuilding--------"
-clang -Dcl_clang_storage_class_specifiers -isystem /root/Work/llvm/libclc/generic/include -include clc/clc.h -x cl -emit-llvm -S $name.cl -o $name.ll || exit	# compile OpenCL kernel (.cl)
+clang -Dcl_clang_storage_class_specifiers -isystem llvm-project/libclc/generic/include -include clc/clc.h -x cl -emit-llvm -S apps/$app/$name.cl -o apps/$app/$name.ll || exit	# compile OpenCL kernel (.cl)
 sed -i "1c #define APP \"$app\"" /root/Work/llvm/llvm-project/llvm/lib/Transforms/SameBuffer/SameBuffer.cpp
 sed -i "1c #define APP \"$app\"" /root/Work/llvm/llvm-project/llvm/lib/Transforms/InOut/InOut.cpp
 sed -i "1c #define APP \"$app\"" /root/Work/llvm/llvm-project/llvm/lib/Transforms/KKC/KKC.cpp
