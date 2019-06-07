@@ -1,4 +1,4 @@
-#define APP "BFS"
+#define APP "RSCD"
 
 #include <iostream>
 #include <sstream>
@@ -44,12 +44,12 @@ namespace {
 
     bool runOnModule(Module &M) override {
 
-      // we need scnt and same[..] from SameBuffer.out
+      // we need scnt and same[..] from SameBuf.out
       // scnt: number of the pairs of args with same buffer
       // same[..]: pairs of args with same buffer
       int same[10][4];
       std::string app = APP;
-      std::string file = "/root/Work/llvm/apps/" + app + "/SameBuffer.out";
+      std::string file = "/root/Work/llvm/apps/" + app + "/SameBuf.out";
       std::ifstream fin(file);
       char line[20];
       int scnt = 0;

@@ -1,4 +1,4 @@
-#define APP "BFS"
+#define APP "RSCD"
 
 #include <iostream>
 #include <sstream>
@@ -262,13 +262,13 @@ namespace {
 
     bool runOnModule(Module &M) override {
 
-      // 1. we need x and y[..] from NumKernels.out
+      // 1. we need x and y[..] from NumKernel.out
       // x: number of kernels; 
       // y[i]: number of args for each kernel
       int x;  
       int y[10]; 
       std::string app = APP;
-      std::string file = "/root/Work/llvm/apps/" + app + "/NumKernels.out";
+      std::string file = "/root/Work/llvm/apps/" + app + "/NumKernel.out";
       std::ifstream fin(file);
       char line[20];
       fin.getline(line, sizeof(line));
@@ -281,14 +281,14 @@ namespace {
         ss >> y[i++];
       }
 
-      // 2. we need kernel pairs and Y/N from KKC.out
+      // 2. we need kernel pairs and Y/N from MemAcc.out
       // tmpk1, tmpk2: id of kernel pairs
       // cond: Y/N about KKC
       // and store to k[..]: all kernels in kernel pairs that are not KKC
       int k[10];
       int tmpk1, tmpk2;
       std::string cond;
-      file = "/root/Work/llvm/apps/" + app + "/KKC.out";
+      file = "/root/Work/llvm/apps/" + app + "/MemAcc.out";
       std::ifstream fin2(file);
       char line2[20];
       int kcnt = 0;
