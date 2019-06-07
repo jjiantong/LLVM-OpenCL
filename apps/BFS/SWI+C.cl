@@ -15,7 +15,7 @@ void BFS_in(__global int * restrict q1, __global int *n_t) {
 
 	for(int base = 0; base < n_t_local; base++) 
 
-		write_channel_altera(chan, q1[base]);
+		write_channel_intel(chan, q1[base]);
 }
 
 __kernel  
@@ -28,7 +28,7 @@ void BFS_0(__global Node * restrict graph_nodes_av, __global Edge * restrict gra
 	int tail_bin = 0;
 
 	for(int base = 0; base < n_t_local; base++) {
-		int pid = read_channel_altera(chan);
+		int pid = read_channel_intel(chan);
 		cost[pid] = iter_local;
 
         Node cur_node;

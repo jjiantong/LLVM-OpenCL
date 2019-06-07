@@ -1,4 +1,4 @@
-#define APP "RSCD"
+#define APP "TQH"
 
 #include <iostream>
 #include <sstream>
